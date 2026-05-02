@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SmartList</title>
+    <style>
+        :root {
+            --primary: #6C63FF;
+            --bg: #f4f6f8;
+            --card: #ffffff;
+            --text: #2d3436;
+            --danger: #ff7675;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        header {
+            background: var(--primary);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; font-weight: 600; }
+
+        .input-area {
+            background: var(--card);
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        button {
+            border: none;
+            border-radius: 12px;
+            padding: 0 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: transform 0.1s;
+        }
+
+        button:active { transform: scale(0.95); }
+
+        .btn-add { background: var(--primary); color: white; }
+        
+        .btn-voice { 
+            background: #ffeaa7; 
+            color: #d35400;
+            width: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .btn-voice.listening { background: #ff7675; color: white; animation: pulse 1s infinite; }
+
+        ul {
+            list-style: none;
+            padding: 15px;
+            margin: 0;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        li {
+            background: var(--card);
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            animation: slideIn 0.3s ease;
+        }
+
+        li.completed span {
+            text-decoration: line-through;
+            color: #b2bec3;
+        }
+
+        .delete-btn {
+            background: transparent;
+            color: var(--danger);
+            font-size: 20px;
+            padding: 5px 10px;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            color: #b2bec3;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>🛒 SmartList</h1>
+	<link rel="manifest" href="manifest.json">
+</header>
+
+<div class="input-area">
+    <input type="text" id="itemInput" placeholder="Что нужно купить?">
+    <button class="btn-voice" id="voiceBtn" title="Голосовой ввод">🎤</button>
+    <button class="btn-add" id="addBtn">+</button>
+</div>
+
+<ul id="shoppingList">
+    <!-- Items will appear here -->
+</ul>
+
+<script>
+    // --- Логика приложения ---
+    const itemInput = document.getElementById('itemInput');
+    const addBtn = document.getElementById('addBtn');
+    const voiceBtn = document.getElementById('voiceBtn');
+    const shoppingList = document.getElementById('shoppingList');
+
+    // Загрузка из LocalStorage
+    let items = JSON.parse(localStorage.getItem('smartListItems')) || [];
+
+    function saveItems() {
+        localStorage.setItem('smartListItems', JSON.stringify(items));
+        render();
+    }
+
+    function render() {
+        shoppingList.innerHTML = '';
+        if (items.length === 0) {
+            shoppingList.innerHTML = '<div class="empty-state">Список пуст.<br>Добавьте товар или нажмите 🎤</div>';
+            return;
+        }
+
+        items.forEach((item, index) => {
+            const li = document.createElement('li');
+            if (item.completed) li.classList.add('completed');
+            
+            li.innerHTML = `
+                <span onclick="toggleItem(${index})">${item.text}</span>
+                <button class="delete-btn" onclick="deleteItem(${index})">×</button>
+            `;
+            shoppingList.appendChild(li);
+        });
+    }
+
+    function addItem() {
+        const text = itemInput.value.trim();
+        if (text) {
+            items.unshift({ text: text, completed: false });
+            itemInput.value = '';
+            saveItems();
+        }
+    }
+
+    window.toggleItem = (index) => {
+        items[index].completed = !items[index].completed;
+        // Перемещаем выполненные вниз
+        items.sort((a, b) => a.completed - b.completed);
+        saveItems();
+    };
+
+    window.deleteItem = (index) => {
+        items.splice(index, 1);
+        saveItems();
+    };
+
+    addBtn.addEventListener('click', addItem);
+    itemInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') addItem();
+    });
+
+    // --- Голосовой ввод ---
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'ru-RU';
+        recognition.interimResults = false;
+
+        voiceBtn.addEventListener('click', () => {
+            recognition.start();
+            voiceBtn.classList.add('listening');
+        });
+
+        recognition.onresult = (event) => {
+            const transcript = event.results[0][0].transcript;
+            itemInput.value = transcript;
+            addItem(); // Сразу добавляем после голоса
+            voiceBtn.classList.remove('listening');
+        };
+
+        recognition.onerror = () => {
+            voiceBtn.classList.remove('listening');
+            alert('Ошибка распознавания. Попробуйте еще раз.');
+        };
+        
+        recognition.onend = () => {
+            voiceBtn.classList.remove('listening');
+        };
+    } else {
+        voiceBtn.style.display = 'none';
+    }
+
+    // Инициализация
+    render();
+</script>
+
+</body>
+</html>
